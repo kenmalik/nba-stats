@@ -6,18 +6,21 @@ import pandas as pd
 
 
 @dataclass
-class BoxStats:
+class PlayerStats:
     games_played: int
     points: float
     rebounds: float
     assists: float
+    offensive_rebound_percentage: float
+    defensive_rebound_percentage: float
+    true_shooting_percentage: float
 
 
 @dataclass
 class SeasonStats:
     season: str
     team_abbreviation: str
-    box_stats: BoxStats
+    box_stats: PlayerStats
 
 
 @dataclass
@@ -55,6 +58,19 @@ def aggregate_player_seasons(df: pd.DataFrame) -> pd.DataFrame:
                 "ast": float((season_rows["ast"] * weights).sum() / weighted_games)
                 if weights is not None
                 else float(season_rows["ast"].mean()),
+                "oreb_pct": float(
+                    (season_rows["oreb_pct"] * weights).sum() / weighted_games
+                )
+                if weights is not None
+                else float(season_rows["oreb_pct"].mean()),
+                "dreb_pct": float(
+                    (season_rows["dreb_pct"] * weights).sum() / weighted_games
+                )
+                if weights is not None
+                else float(season_rows["dreb_pct"].mean()),
+                "ts_pct": float((season_rows["ts_pct"] * weights).sum() / weighted_games)
+                if weights is not None
+                else float(season_rows["ts_pct"].mean()),
             }
         )
 
@@ -73,11 +89,14 @@ def build_players(df: pd.DataFrame) -> list[Player]:
                 SeasonStats(
                     season=str(row["season"]),
                     team_abbreviation=str(row["team_abbreviation"]),
-                    box_stats=BoxStats(
+                    box_stats=PlayerStats(
                         games_played=int(row["gp"]),
                         points=float(row["pts"]),
                         rebounds=float(row["reb"]),
                         assists=float(row["ast"]),
+                        offensive_rebound_percentage=float(row["oreb_pct"]),
+                        defensive_rebound_percentage=float(row["dreb_pct"]),
+                        true_shooting_percentage=float(row["ts_pct"]),
                     ),
                 )
             )

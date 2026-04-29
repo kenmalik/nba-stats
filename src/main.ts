@@ -1,17 +1,20 @@
 import * as d3 from 'd3'
 import './style.css'
 
-type BoxStats = {
+type PlayerStats = {
   games_played: number
   points: number
   rebounds: number
   assists: number
+  offensive_rebound_percentage: number
+  defensive_rebound_percentage: number
+  true_shooting_percentage: number
 }
 
 type SeasonStats = {
   season: string
   team_abbreviation: string
-  box_stats: BoxStats
+  box_stats: PlayerStats
 }
 
 type Player = {
@@ -25,7 +28,7 @@ type ChartRecord = {
   name: string
   season: string
   teamAbbreviation: string
-  boxStats: BoxStats
+  boxStats: PlayerStats
 }
 
 type StatSummary = {
@@ -81,12 +84,23 @@ const PARALLEL_LINE_COLOR = '#ff9b73'
 const PARALLEL_OPACITY = 0.16
 const PARALLEL_AXIS_MARGIN = { top: 84, right: 56, bottom: 72, left: 56 }
 
-const STAT_KEYS = ['games_played', 'points', 'rebounds', 'assists'] as const
+const STAT_KEYS = [
+  'offensive_rebound_percentage',
+  'defensive_rebound_percentage',
+  'true_shooting_percentage',
+  'points',
+  'rebounds',
+  'assists',
+  'games_played',
+] as const
 const STAT_LABELS: Record<(typeof STAT_KEYS)[number], string> = {
   games_played: 'Games',
   points: 'Points',
   rebounds: 'Rebounds',
   assists: 'Assists',
+  offensive_rebound_percentage: 'OREB%',
+  defensive_rebound_percentage: 'DREB%',
+  true_shooting_percentage: 'TS%',
 }
 
 const app = getApp()
@@ -360,7 +374,7 @@ function updateView(state: State, refs: DomRefs) {
   refs.chartTitle.textContent = `${state.selectedSeason || 'Season'} ${isSpider ? 'comparison' : 'distribution'}`
   refs.chartHelper.textContent = isSpider
     ? 'Axis ranges are normalized to the season leaders for each stat.'
-    : 'Each line represents one player in the selected season across all four stats.'
+    : 'Each line represents one player in the selected season across all seven stats.'
 
   refs.selectionCount.textContent = `${state.selectedPlayers.length}/${MAX_PLAYERS} selected`
   refs.selectedChips.innerHTML = renderSelectedPlayers(state.selectedPlayers, view.seasonRecords)
@@ -573,7 +587,7 @@ function renderSpiderChart(
   }
 
   const center = CHART_SIZE / 2
-  const radius = CHART_SIZE * 0.31
+  const radius = CHART_SIZE * 0.27
 
   const layer = svg
     .append('g')
@@ -599,7 +613,7 @@ function renderSpiderChart(
   }
 
   STAT_KEYS.forEach((key, index) => {
-    const labelPoint = polarToCartesian(angleForIndex(index), radius + 48)
+    const labelPoint = polarToCartesian(angleForIndex(index), radius + 56)
     const axisEnd = polarToCartesian(angleForIndex(index), radius)
 
     layer
@@ -805,19 +819,27 @@ function closePath(points: Array<{ x: number; y: number }>) {
 }
 
 function labelAnchor(index: number) {
-  if (index === 0) {
+  const point = polarToCartesian(angleForIndex(index), 1)
+
+  if (Math.abs(point.x) < 0.2) {
     return 'middle'
   }
 
-  return index === 1 ? 'start' : index === 3 ? 'end' : 'middle'
+  return point.x > 0 ? 'start' : 'end'
 }
 
 function labelBaseline(index: number) {
-  if (index === 0) {
+  const point = polarToCartesian(angleForIndex(index), 1)
+
+  if (point.y < -0.75) {
     return 'auto'
   }
 
-  return index === 2 ? 'hanging' : 'middle'
+  if (point.y > 0.75) {
+    return 'hanging'
+  }
+
+  return 'middle'
 }
 
 function formatStatValue(
@@ -826,6 +848,14 @@ function formatStatValue(
 ) {
   if (key === 'games_played') {
     return Math.round(value).toString()
+  }
+
+  if (
+    key === 'offensive_rebound_percentage' ||
+    key === 'defensive_rebound_percentage' ||
+    key === 'true_shooting_percentage'
+  ) {
+    return `${(value * 100).toFixed(1)}%`
   }
 
   return value.toFixed(1)

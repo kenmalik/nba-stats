@@ -26,6 +26,41 @@ class Player:
     seasons: list[SeasonStats]
 
 
+def aggregate_player_seasons(df: pd.DataFrame) -> pd.DataFrame:
+    records: list[dict[str, str | int | float]] = []
+
+    grouped = df.groupby(["player_name", "season"], sort=True)
+
+    for (player_name, season), season_rows in grouped:
+        total_games = int(season_rows["gp"].sum())
+        weighted_games = total_games if total_games > 0 else len(season_rows)
+        weights = season_rows["gp"] if total_games > 0 else None
+
+        records.append(
+            {
+                "player_name": str(player_name),
+                "season": str(season),
+                "team_abbreviation": (
+                    str(season_rows["team_abbreviation"].iloc[0])
+                    if len(season_rows) == 1
+                    else "TOT"
+                ),
+                "gp": total_games,
+                "pts": float((season_rows["pts"] * weights).sum() / weighted_games)
+                if weights is not None
+                else float(season_rows["pts"].mean()),
+                "reb": float((season_rows["reb"] * weights).sum() / weighted_games)
+                if weights is not None
+                else float(season_rows["reb"].mean()),
+                "ast": float((season_rows["ast"] * weights).sum() / weighted_games)
+                if weights is not None
+                else float(season_rows["ast"].mean()),
+            }
+        )
+
+    return pd.DataFrame.from_records(records)
+
+
 def build_players(df: pd.DataFrame) -> list[Player]:
     players: list[Player] = []
 
@@ -57,7 +92,8 @@ def main() -> None:
     output_path = Path("./players.json")
 
     df = pd.read_csv(input_path)
-    players = build_players(df)
+    aggregated_df = aggregate_player_seasons(df)
+    players = build_players(aggregated_df)
 
     with output_path.open("w", encoding="utf-8") as output_file:
         json.dump([asdict(player) for player in players], output_file, indent=2)

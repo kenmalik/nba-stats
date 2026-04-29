@@ -19,6 +19,8 @@ type Player = {
   seasons: SeasonStats[]
 }
 
+type ChartMode = 'spider' | 'parallel'
+
 type ChartRecord = {
   name: string
   season: string
@@ -26,10 +28,17 @@ type ChartRecord = {
   boxStats: BoxStats
 }
 
+type StatSummary = {
+  key: (typeof STAT_KEYS)[number]
+  min: number
+  max: number
+}
+
 type State = {
   players: Player[]
   seasons: string[]
   recordsBySeason: Map<string, ChartRecord[]>
+  chartMode: ChartMode
   selectedSeason: string
   selectedPlayers: string[]
   searchTerm: string
@@ -40,27 +49,37 @@ type ViewModel = {
   selectedRecords: ChartRecord[]
   playerOptions: ChartRecord[]
   hiddenCount: number
+  statSummaries: StatSummary[]
 }
 
 type DomRefs = {
   seasonSelect: HTMLSelectElement
   seasonPlayerCount: HTMLElement
+  playerBlock: HTMLElement
   selectionCount: HTMLElement
   selectedChips: HTMLElement
   playerSearch: HTMLInputElement
   playerOptions: HTMLElement
   playerHelper: HTMLElement
+  chartEyebrow: HTMLElement
   chartTitle: HTMLElement
+  chartHelper: HTMLElement
   chartPlaceholder: HTMLElement
-  legendList: HTMLElement
-  radarChart: SVGSVGElement
+  sideEyebrow: HTMLElement
+  sideTitle: HTMLElement
+  sideContent: HTMLElement
+  chartSvg: SVGSVGElement
+  modeButtons: HTMLButtonElement[]
 }
 
 const MAX_PLAYERS = 5
 const INITIAL_SELECTION_COUNT = 3
 const CHART_SIZE = 680
 const RINGS = 5
-const PALETTE = ['#ff6b35', '#157a6e', '#3a86ff', '#ef476f', '#6a4c93']
+const PALETTE = ['#ff7a45', '#4fb3a2', '#59a4ff', '#ff5f8a', '#b78cff']
+const PARALLEL_LINE_COLOR = '#ff9b73'
+const PARALLEL_OPACITY = 0.16
+const PARALLEL_AXIS_MARGIN = { top: 84, right: 56, bottom: 72, left: 56 }
 
 const STAT_KEYS = ['games_played', 'points', 'rebounds', 'assists'] as const
 const STAT_LABELS: Record<(typeof STAT_KEYS)[number], string> = {
@@ -88,6 +107,7 @@ async function initializeApp() {
       players,
       seasons,
       recordsBySeason,
+      chartMode: 'spider',
       selectedSeason,
       selectedPlayers,
       searchTerm: '',
@@ -164,29 +184,31 @@ function renderAppShell(state: State) {
         <div class="chart-card">
           <div class="card-header">
             <div>
-              <p class="eyebrow">Radar chart</p>
+              <p id="chart-eyebrow" class="eyebrow">Spider chart</p>
               <h2 id="chart-title">Season comparison</h2>
+            </div>
+            <div class="mode-toggle" role="tablist" aria-label="Chart type">
+              <button class="toggle-button" type="button" data-chart-mode="spider">Spider</button>
+              <button class="toggle-button" type="button" data-chart-mode="parallel">Parallel</button>
             </div>
           </div>
           <div class="chart-frame">
-            <svg id="radar-chart" class="radar-chart" viewBox="0 0 ${CHART_SIZE} ${CHART_SIZE}" aria-label="Player spider chart"></svg>
+            <svg id="chart-svg" class="chart-svg" viewBox="0 0 ${CHART_SIZE} ${CHART_SIZE}" aria-label="Player stats chart"></svg>
             <div id="chart-placeholder" class="chart-placeholder">
               <p>Select at least one player to render the chart.</p>
             </div>
           </div>
-          <p class="helper-copy">
-            Axis ranges are normalized to the season leaders for each stat.
-          </p>
+          <p id="chart-helper" class="helper-copy"></p>
         </div>
 
         <aside class="legend-card">
           <div class="card-header">
             <div>
-              <p class="eyebrow">Selected players</p>
-              <h2>Legend and values</h2>
+              <p id="side-eyebrow" class="eyebrow">Selected players</p>
+              <h2 id="side-title">Legend and values</h2>
             </div>
           </div>
-          <div id="legend-list" class="legend-list"></div>
+          <div id="side-content" class="legend-list"></div>
         </aside>
       </section>
 
@@ -201,7 +223,7 @@ function renderAppShell(state: State) {
           <p id="season-player-count" class="helper-copy"></p>
         </div>
 
-        <div class="control-block player-block">
+        <div id="player-block" class="control-block player-block">
           <div class="label-row">
             <label class="control-label" for="player-search">Players</label>
             <span id="selection-count" class="selection-count"></span>
@@ -224,15 +246,21 @@ function getDomRefs(): DomRefs {
   return {
     seasonSelect: getRequiredElement('#season-select'),
     seasonPlayerCount: getRequiredElement('#season-player-count'),
+    playerBlock: getRequiredElement('#player-block'),
     selectionCount: getRequiredElement('#selection-count'),
     selectedChips: getRequiredElement('#selected-chips'),
     playerSearch: getRequiredElement('#player-search'),
     playerOptions: getRequiredElement('#player-options'),
     playerHelper: getRequiredElement('#player-helper'),
+    chartEyebrow: getRequiredElement('#chart-eyebrow'),
     chartTitle: getRequiredElement('#chart-title'),
+    chartHelper: getRequiredElement('#chart-helper'),
     chartPlaceholder: getRequiredElement('#chart-placeholder'),
-    legendList: getRequiredElement('#legend-list'),
-    radarChart: getRequiredElement('#radar-chart'),
+    sideEyebrow: getRequiredElement('#side-eyebrow'),
+    sideTitle: getRequiredElement('#side-title'),
+    sideContent: getRequiredElement('#side-content'),
+    chartSvg: getRequiredElement('#chart-svg'),
+    modeButtons: [...document.querySelectorAll<HTMLButtonElement>('[data-chart-mode]')],
   }
 }
 
@@ -251,12 +279,29 @@ function bindControls(state: State, refs: DomRefs) {
     updateView(state, refs)
   })
 
+  refs.modeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextMode = button.dataset.chartMode as ChartMode | undefined
+
+      if (!nextMode || nextMode === state.chartMode) {
+        return
+      }
+
+      state.chartMode = nextMode
+      updateView(state, refs)
+    })
+  })
+
   refs.playerSearch.addEventListener('input', (event) => {
     state.searchTerm = (event.target as HTMLInputElement).value
     updateView(state, refs)
   })
 
   refs.playerOptions.addEventListener('click', (event) => {
+    if (state.chartMode !== 'spider') {
+      return
+    }
+
     const target = event.target as HTMLElement
     const option = target.closest<HTMLElement>('[data-player-name]')
 
@@ -275,6 +320,10 @@ function bindControls(state: State, refs: DomRefs) {
   })
 
   refs.selectedChips.addEventListener('click', (event) => {
+    if (state.chartMode !== 'spider') {
+      return
+    }
+
     const target = event.target as HTMLElement
     const removeButton = target.closest<HTMLButtonElement>('[data-remove-player]')
 
@@ -295,9 +344,24 @@ function bindControls(state: State, refs: DomRefs) {
 
 function updateView(state: State, refs: DomRefs) {
   const view = buildViewModel(state)
+  const isSpider = state.chartMode === 'spider'
 
   refs.seasonSelect.value = state.selectedSeason
   refs.seasonPlayerCount.textContent = `${view.seasonRecords.length} players available`
+  refs.playerBlock.classList.toggle('is-hidden', !isSpider)
+
+  refs.modeButtons.forEach((button) => {
+    const isActive = button.dataset.chartMode === state.chartMode
+    button.classList.toggle('is-active', isActive)
+    button.setAttribute('aria-pressed', String(isActive))
+  })
+
+  refs.chartEyebrow.textContent = isSpider ? 'Spider chart' : 'Parallel coordinates'
+  refs.chartTitle.textContent = `${state.selectedSeason || 'Season'} ${isSpider ? 'comparison' : 'distribution'}`
+  refs.chartHelper.textContent = isSpider
+    ? 'Axis ranges are normalized to the season leaders for each stat.'
+    : 'Each line represents one player in the selected season across all four stats.'
+
   refs.selectionCount.textContent = `${state.selectedPlayers.length}/${MAX_PLAYERS} selected`
   refs.selectedChips.innerHTML = renderSelectedPlayers(state.selectedPlayers, view.seasonRecords)
 
@@ -313,15 +377,18 @@ function updateView(state: State, refs: DomRefs) {
       ? `Showing the first 16 matches. Refine your search to narrow ${view.hiddenCount} more players.`
       : 'Select up to five players to overlay their season shapes.'
 
-  refs.chartTitle.textContent = state.selectedSeason || 'Season comparison'
-  refs.legendList.innerHTML =
-    view.selectedRecords.length > 0
-      ? view.selectedRecords
-          .map((record, index) => renderLegendItem(record, PALETTE[index]))
-          .join('')
-      : '<p class="empty-copy">No player selected yet.</p>'
+  refs.sideEyebrow.textContent = isSpider ? 'Selected players' : 'Season summary'
+  refs.sideTitle.textContent = isSpider ? 'Legend and values' : 'Ranges and totals'
+  refs.sideContent.innerHTML = isSpider
+    ? renderSpiderSidePanel(view.selectedRecords)
+    : renderParallelSummary(view.seasonRecords, view.statSummaries)
 
-  renderRadarChart(refs.radarChart, refs.chartPlaceholder, view.seasonRecords, view.selectedRecords)
+  if (isSpider) {
+    renderSpiderChart(refs.chartSvg, refs.chartPlaceholder, view.seasonRecords, view.selectedRecords)
+    return
+  }
+
+  renderParallelChart(refs.chartSvg, refs.chartPlaceholder, view.seasonRecords, view.statSummaries)
 }
 
 function buildViewModel(state: State): ViewModel {
@@ -337,7 +404,20 @@ function buildViewModel(state: State): ViewModel {
     selectedRecords,
     playerOptions,
     hiddenCount,
+    statSummaries: buildStatSummaries(seasonRecords),
   }
+}
+
+function buildStatSummaries(records: ChartRecord[]) {
+  return STAT_KEYS.map((key) => {
+    const values = records.map((record) => record.boxStats[key])
+
+    return {
+      key,
+      min: d3.min(values) ?? 0,
+      max: d3.max(values) ?? 0,
+    }
+  })
 }
 
 function togglePlayerSelection(state: State, playerName: string) {
@@ -418,6 +498,16 @@ function renderPlayerOption(record: ChartRecord, selectedPlayers: string[]) {
   `
 }
 
+function renderSpiderSidePanel(selectedRecords: ChartRecord[]) {
+  if (selectedRecords.length === 0) {
+    return '<p class="empty-copy">No player selected yet.</p>'
+  }
+
+  return selectedRecords
+    .map((record, index) => renderLegendItem(record, PALETTE[index]))
+    .join('')
+}
+
 function renderLegendItem(record: ChartRecord, color: string) {
   return `
     <article class="legend-item">
@@ -437,7 +527,36 @@ function renderLegendItem(record: ChartRecord, color: string) {
   `
 }
 
-function renderRadarChart(
+function renderParallelSummary(records: ChartRecord[], statSummaries: StatSummary[]) {
+  if (records.length === 0) {
+    return '<p class="empty-copy">No data available for this season.</p>'
+  }
+
+  return `
+    <article>
+      <dl class="summary-grid">
+        <div>
+          <dt>Players</dt>
+          <dd>${records.length}</dd>
+        </div>
+      </dl>
+      <dl class="stat-grid stat-grid-parallel">
+        ${statSummaries
+          .map(
+            (summary) => `
+              <div>
+                <dt>${STAT_LABELS[summary.key]}</dt>
+                <dd>${formatStatRange(summary)}</dd>
+              </div>
+            `,
+          )
+          .join('')}
+      </dl>
+    </article>
+  `
+}
+
+function renderSpiderChart(
   svgElement: SVGSVGElement,
   placeholder: HTMLElement,
   seasonRecords: ChartRecord[],
@@ -447,6 +566,7 @@ function renderRadarChart(
   svg.selectAll('*').remove()
 
   placeholder.classList.toggle('hidden', selectedRecords.length > 0)
+  placeholder.innerHTML = '<p>Select at least one player to render the chart.</p>'
 
   if (selectedRecords.length === 0) {
     return
@@ -541,6 +661,128 @@ function renderRadarChart(
   })
 }
 
+function renderParallelChart(
+  svgElement: SVGSVGElement,
+  placeholder: HTMLElement,
+  seasonRecords: ChartRecord[],
+  statSummaries: StatSummary[],
+) {
+  const svg = d3.select(svgElement)
+  svg.selectAll('*').remove()
+
+  placeholder.classList.toggle('hidden', seasonRecords.length > 0)
+  placeholder.innerHTML = '<p>No player data available for this season.</p>'
+
+  if (seasonRecords.length === 0) {
+    return
+  }
+
+  const width = CHART_SIZE
+  const height = CHART_SIZE
+  const xScale = d3
+    .scalePoint<(typeof STAT_KEYS)[number]>()
+    .domain(STAT_KEYS)
+    .range([PARALLEL_AXIS_MARGIN.left, width - PARALLEL_AXIS_MARGIN.right])
+
+  const yScales = new Map<(typeof STAT_KEYS)[number], d3.ScaleLinear<number, number>>()
+
+  statSummaries.forEach((summary) => {
+    const domainMin = summary.min
+    const domainMax = summary.max === summary.min ? summary.max + 1 : summary.max
+
+    yScales.set(
+      summary.key,
+      d3
+        .scaleLinear()
+        .domain([domainMin, domainMax])
+        .range([height - PARALLEL_AXIS_MARGIN.bottom, PARALLEL_AXIS_MARGIN.top]),
+    )
+  })
+
+  const layer = svg.append('g')
+  const line = d3
+    .line<[number, number]>()
+    .x((point) => point[0])
+    .y((point) => point[1])
+
+  const grid = layer.append('g').attr('class', 'parallel-grid')
+
+  STAT_KEYS.forEach((key) => {
+    const x = xScale(key)
+    const yScale = yScales.get(key)
+    const summary = statSummaries.find((item) => item.key === key)
+
+    if (x === undefined || yScale === undefined || summary === undefined) {
+      return
+    }
+
+    grid
+      .append('line')
+      .attr('class', 'parallel-axis-line')
+      .attr('x1', x)
+      .attr('x2', x)
+      .attr('y1', PARALLEL_AXIS_MARGIN.top)
+      .attr('y2', height - PARALLEL_AXIS_MARGIN.bottom)
+
+    grid
+      .append('text')
+      .attr('class', 'parallel-axis-label')
+      .attr('x', x)
+      .attr('y', PARALLEL_AXIS_MARGIN.top - 26)
+      .attr('text-anchor', 'middle')
+      .text(STAT_LABELS[key])
+
+    grid
+      .append('text')
+      .attr('class', 'parallel-axis-value')
+      .attr('x', x)
+      .attr('y', PARALLEL_AXIS_MARGIN.top - 8)
+      .attr('text-anchor', 'middle')
+      .text(formatStatValue(key, summary.max))
+
+    grid
+      .append('text')
+      .attr('class', 'parallel-axis-value')
+      .attr('x', x)
+      .attr('y', height - PARALLEL_AXIS_MARGIN.bottom + 26)
+      .attr('text-anchor', 'middle')
+      .text(formatStatValue(key, summary.min))
+
+    yScale.ticks(4).forEach((tick) => {
+      grid
+        .append('line')
+        .attr('class', 'parallel-tick')
+        .attr('x1', x - 7)
+        .attr('x2', x + 7)
+        .attr('y1', yScale(tick))
+        .attr('y2', yScale(tick))
+    })
+  })
+
+  const lines = layer.append('g').attr('class', 'parallel-lines')
+
+  seasonRecords.forEach((record) => {
+    const points = STAT_KEYS.map((key) => {
+      const x = xScale(key)
+      const yScale = yScales.get(key)
+
+      if (x === undefined || yScale === undefined) {
+        return null
+      }
+
+      return [x, yScale(record.boxStats[key])] as [number, number]
+    }).filter((point): point is [number, number] => point !== null)
+
+    lines
+      .append('path')
+      .attr('d', line(points) ?? '')
+      .attr('fill', 'none')
+      .attr('stroke', PARALLEL_LINE_COLOR)
+      .attr('stroke-opacity', PARALLEL_OPACITY)
+      .attr('stroke-width', 1.3)
+  })
+}
+
 function angleForIndex(index: number) {
   return -Math.PI / 2 + (index * Math.PI * 2) / STAT_KEYS.length
 }
@@ -587,6 +829,10 @@ function formatStatValue(
   }
 
   return value.toFixed(1)
+}
+
+function formatStatRange(summary: StatSummary) {
+  return `${formatStatValue(summary.key, summary.min)} - ${formatStatValue(summary.key, summary.max)}`
 }
 
 function renderStatus(title: string, message: string, isError = false) {

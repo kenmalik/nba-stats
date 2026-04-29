@@ -310,6 +310,38 @@ h3 {
   margin-bottom: 18px;
 }
 
+.mode-toggle {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--panel-muted);
+  border: 1px solid var(--line);
+  gap: 4px;
+}
+
+.toggle-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.toggle-button:hover {
+  color: var(--text-strong);
+}
+
+.toggle-button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  box-shadow: inset 0 0 0 1px rgba(255, 122, 69, 0.28);
+}
+
 .chart-frame {
   position: relative;
   min-height: 420px;
@@ -319,7 +351,7 @@ h3 {
   padding: 18px;
 }
 
-.radar-chart {
+.chart-svg {
   width: 100%;
   height: auto;
   display: block;
@@ -349,6 +381,18 @@ h3 {
   border-radius: var(--radius);
   background: var(--panel-strong);
   border: 1px solid var(--line);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.summary-grid div {
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: 14px;
 }
 
 .legend-player {
@@ -385,6 +429,10 @@ h3 {
   color: var(--text-strong);
   font-weight: 700;
   margin-top: 4px;
+}
+
+.stat-grid-parallel {
+  margin-top: 10px;
 }
 
 .status-panel {
@@ -424,6 +472,36 @@ h3 {
   fill: var(--muted);
 }
 
+.parallel-axis-line {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.5;
+}
+
+.parallel-tick {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+}
+
+.parallel-axis-label,
+.parallel-axis-value {
+  fill: var(--text-strong);
+  font-family: var(--sans);
+}
+
+.parallel-axis-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.parallel-axis-value {
+  font-size: 0.78rem;
+  fill: var(--muted);
+}
+
+.is-hidden {
+  display: none;
+}
+
 @media (max-width: 980px) {
   .page-shell {
     width: min(100% - 24px, 1240px);
@@ -445,6 +523,10 @@ h3 {
   .card-header {
     display: flex;
     flex-direction: column;
+  }
+
+  .mode-toggle {
+    align-self: flex-start;
   }
 
   .controls-panel,

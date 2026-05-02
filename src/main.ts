@@ -53,6 +53,7 @@ type ViewModel = {
   playerOptions: ChartRecord[]
   hiddenCount: number
   statSummaries: StatSummary[]
+  playerColors: Map<string, string>
 }
 
 type DomRefs = {
@@ -377,7 +378,7 @@ function updateView(state: State, refs: DomRefs) {
     : 'Each line represents one player in the selected season across all seven stats.'
 
   refs.selectionCount.textContent = `${state.selectedPlayers.length}/${MAX_PLAYERS} selected`
-  refs.selectedChips.innerHTML = renderSelectedPlayers(state.selectedPlayers, view.seasonRecords)
+  refs.selectedChips.innerHTML = renderSelectedPlayers(state.selectedPlayers, view.seasonRecords, view.playerColors)
 
   const placeholder = `Search players in ${state.selectedSeason || 'this season'}`
   refs.playerSearch.placeholder = placeholder
@@ -394,11 +395,11 @@ function updateView(state: State, refs: DomRefs) {
   refs.sideEyebrow.textContent = isSpider ? 'Selected players' : 'Season summary'
   refs.sideTitle.textContent = isSpider ? 'Legend' : 'Ranges and totals'
   refs.sideContent.innerHTML = isSpider
-    ? renderSpiderSidePanel(view.selectedRecords)
+    ? renderSpiderSidePanel(view.selectedRecords, view.playerColors)
     : renderParallelSummary(view.seasonRecords, view.statSummaries)
 
   if (isSpider) {
-    renderSpiderChart(refs.chartSvg, refs.chartPlaceholder, view.seasonRecords, view.selectedRecords)
+    renderSpiderChart(refs.chartSvg, refs.chartPlaceholder, view.seasonRecords, view.selectedRecords, view.playerColors)
     return
   }
 
@@ -413,12 +414,17 @@ function buildViewModel(state: State): ViewModel {
   const playerOptions = filterPlayerOptions(seasonRecords, state.searchTerm)
   const hiddenCount = Math.max(0, playerOptions.length - 16)
 
+  const playerColors = new Map(
+    state.selectedPlayers.map((name, index) => [name, PALETTE[index]]),
+  )
+
   return {
     seasonRecords,
     selectedRecords,
     playerOptions,
     hiddenCount,
     statSummaries: buildStatSummaries(seasonRecords),
+    playerColors,
   }
 }
 
@@ -461,7 +467,7 @@ function filterPlayerOptions(records: ChartRecord[], searchTerm: string) {
   )
 }
 
-function renderSelectedPlayers(selectedPlayers: string[], records: ChartRecord[]) {
+function renderSelectedPlayers(selectedPlayers: string[], records: ChartRecord[], playerColors: Map<string, string>) {
   if (selectedPlayers.length === 0) {
     return '<p class="empty-copy">No players selected.</p>'
   }
@@ -469,12 +475,13 @@ function renderSelectedPlayers(selectedPlayers: string[], records: ChartRecord[]
   const teamByPlayer = new Map(records.map((record) => [record.name, record.teamAbbreviation]))
 
   return selectedPlayers
-    .map((player, index) => {
+    .map((player) => {
       const team = teamByPlayer.get(player) ?? 'N/A'
+      const color = playerColors.get(player) ?? PALETTE[0]
 
       return `
         <button class="chip" type="button" data-remove-player="${escapeHtml(player)}">
-          <span class="chip-swatch" style="background:${PALETTE[index]}"></span>
+          <span class="chip-swatch" style="background:${color}"></span>
           <span>${escapeHtml(player)}</span>
           <span class="chip-team">${escapeHtml(team)}</span>
           <span class="chip-remove" aria-hidden="true">×</span>
@@ -512,13 +519,13 @@ function renderPlayerOption(record: ChartRecord, selectedPlayers: string[]) {
   `
 }
 
-function renderSpiderSidePanel(selectedRecords: ChartRecord[]) {
+function renderSpiderSidePanel(selectedRecords: ChartRecord[], playerColors: Map<string, string>) {
   if (selectedRecords.length === 0) {
     return '<p class="empty-copy">No player selected yet.</p>'
   }
 
   return selectedRecords
-    .map((record, index) => renderLegendItem(record, PALETTE[index]))
+    .map((record) => renderLegendItem(record, playerColors.get(record.name) ?? PALETTE[0]))
     .join('')
 }
 
@@ -572,6 +579,7 @@ function renderSpiderChart(
   placeholder: HTMLElement,
   seasonRecords: ChartRecord[],
   selectedRecords: ChartRecord[],
+  playerColors: Map<string, string>,
 ) {
   const svg = d3.select(svgElement)
   svg.selectAll('*').remove()
@@ -640,8 +648,8 @@ function renderSpiderChart(
       .text(formatStatValue(key, maxByStat[key]))
   })
 
-  selectedRecords.forEach((record, index) => {
-    const color = PALETTE[index]
+  selectedRecords.forEach((record) => {
+    const color = playerColors.get(record.name) ?? PALETTE[0]
     const points = STAT_KEYS.map((key, statIndex) => {
       const maxValue = maxByStat[key]
       const value = record.boxStats[key]
@@ -659,7 +667,7 @@ function renderSpiderChart(
       .attr('stroke-width', 3)
 
     layer
-      .selectAll(`.point-${index}`)
+      .selectAll(`.point-${record.name.replace(/\s+/g, '-')}`)
       .data(points)
       .enter()
       .append('circle')

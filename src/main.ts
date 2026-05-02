@@ -219,7 +219,7 @@ function renderAppShell(state: State) {
           <div class="card-header">
             <div>
               <p id="side-eyebrow" class="eyebrow">Selected players</p>
-              <h2 id="side-title">Legend and values</h2>
+              <h2 id="side-title">Legend</h2>
             </div>
           </div>
           <div id="side-content" class="legend-list"></div>
@@ -392,7 +392,7 @@ function updateView(state: State, refs: DomRefs) {
       : 'Select up to five players to overlay their season shapes.'
 
   refs.sideEyebrow.textContent = isSpider ? 'Selected players' : 'Season summary'
-  refs.sideTitle.textContent = isSpider ? 'Legend and values' : 'Ranges and totals'
+  refs.sideTitle.textContent = isSpider ? 'Legend' : 'Ranges and totals'
   refs.sideContent.innerHTML = isSpider
     ? renderSpiderSidePanel(view.selectedRecords)
     : renderParallelSummary(view.seasonRecords, view.statSummaries)
@@ -534,9 +534,6 @@ function renderLegendItem(record: ChartRecord, color: string) {
           </div>
         </div>
       </div>
-      <dl class="stat-grid">
-        ${STAT_KEYS.map((key) => `<div><dt>${STAT_LABELS[key]}</dt><dd>${formatStatValue(key, record.boxStats[key])}</dd></div>`).join('')}
-      </dl>
     </article>
   `
 }

@@ -2,7 +2,7 @@ import * as d3 from 'd3'
 import './style.css'
 
 type PlayerStats = {
-  games_played: number
+  assist_percentage: number
   points: number
   rebounds: number
   assists: number
@@ -92,10 +92,10 @@ const STAT_KEYS = [
   'points',
   'rebounds',
   'assists',
-  'games_played',
+  'assist_percentage',
 ] as const
 const STAT_LABELS: Record<(typeof STAT_KEYS)[number], string> = {
-  games_played: 'Games',
+  assist_percentage: 'AST%',
   points: 'Points',
   rebounds: 'Rebounds',
   assists: 'Assists',
@@ -851,14 +851,11 @@ function formatStatValue(
   key: (typeof STAT_KEYS)[number],
   value: number,
 ) {
-  if (key === 'games_played') {
-    return Math.round(value).toString()
-  }
-
   if (
     key === 'offensive_rebound_percentage' ||
     key === 'defensive_rebound_percentage' ||
-    key === 'true_shooting_percentage'
+    key === 'true_shooting_percentage' ||
+    key === 'assist_percentage'
   ) {
     return `${(value * 100).toFixed(1)}%`
   }

@@ -7,13 +7,13 @@ import pandas as pd
 
 @dataclass
 class PlayerStats:
-    games_played: int
     points: float
     rebounds: float
     assists: float
     offensive_rebound_percentage: float
     defensive_rebound_percentage: float
     true_shooting_percentage: float
+    assist_percentage: float
 
 
 @dataclass
@@ -48,7 +48,6 @@ def aggregate_player_seasons(df: pd.DataFrame) -> pd.DataFrame:
                     if len(season_rows) == 1
                     else "TOT"
                 ),
-                "gp": total_games,
                 "pts": float((season_rows["pts"] * weights).sum() / weighted_games)
                 if weights is not None
                 else float(season_rows["pts"].mean()),
@@ -71,6 +70,11 @@ def aggregate_player_seasons(df: pd.DataFrame) -> pd.DataFrame:
                 "ts_pct": float((season_rows["ts_pct"] * weights).sum() / weighted_games)
                 if weights is not None
                 else float(season_rows["ts_pct"].mean()),
+                "ast_pct": float(
+                    (season_rows["ast_pct"] * weights).sum() / weighted_games
+                )
+                if weights is not None
+                else float(season_rows["ast_pct"].mean()),
             }
         )
 
@@ -90,13 +94,13 @@ def build_players(df: pd.DataFrame) -> list[Player]:
                     season=str(row["season"]),
                     team_abbreviation=str(row["team_abbreviation"]),
                     box_stats=PlayerStats(
-                        games_played=int(row["gp"]),
                         points=float(row["pts"]),
                         rebounds=float(row["reb"]),
                         assists=float(row["ast"]),
                         offensive_rebound_percentage=float(row["oreb_pct"]),
                         defensive_rebound_percentage=float(row["dreb_pct"]),
                         true_shooting_percentage=float(row["ts_pct"]),
+                        assist_percentage=float(row["ast_pct"]),
                     ),
                 )
             )
